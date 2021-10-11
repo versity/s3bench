@@ -98,7 +98,7 @@ func main() {
 	s3conf := s3io.New(opts...)
 
 	var sg sync.WaitGroup
-	results := make([]result, files, files)
+	results := make([]result, files)
 	start := time.Now()
 	if upload {
 		if objectsize == 0 {
