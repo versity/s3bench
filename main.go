@@ -148,12 +148,12 @@ func main() {
 			continue
 		}
 		tot += res.size
-		fmt.Printf("%v: %v in %v (%v B/s)\n",
+		fmt.Printf("%v: %v in %v (%v MB/s)\n",
 			i, res.size, res.elapsed,
-			int(math.Ceil(float64(res.size)/res.elapsed.Seconds())))
+			int(math.Ceil(float64(res.size)/res.elapsed.Seconds())/1048576))
 	}
 
 	fmt.Println()
-	fmt.Printf("run perf: %v in %v (%v B/s)\n",
-		tot, elapsed, int(math.Ceil(float64(tot)/elapsed.Seconds())))
+	fmt.Printf("run perf: %v in %v (%v MB/s)\n",
+		tot, elapsed, int(math.Ceil(float64(tot)/elapsed.Seconds())/1048576))
 }
