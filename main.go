@@ -84,6 +84,7 @@ func main() {
 		s3io.WithRegion(awsRegion),
 		s3io.WithEndpoint(endpoint),
 		s3io.WithPartSize(chunksize),
+		s3io.WithConcurrency(concurrency),
 	}
 	if checksumDisable {
 		opts = append(opts, s3io.WithDisableChecksum())
