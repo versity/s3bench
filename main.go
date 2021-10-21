@@ -37,7 +37,7 @@ var (
 func init() {
 	flag.IntVar(&files, "n", 1, "number of objects to read/write")
 	flag.IntVar(&concurrency, "concurrency", 1, "upload/download threads per object")
-	flag.Int64Var(&chunksize, "chunksize", 64*1024*1024, "upload/download threads per object")
+	flag.Int64Var(&chunksize, "chunksize", 64*1024*1024, "upload/download size per thread")
 	flag.Int64Var(&objectsize, "objectsize", 0, "upload object size")
 	flag.StringVar(&awsID, "access", "", "access key, or specify in AWS_ACCESS_KEY_ID env")
 	flag.StringVar(&awsSecret, "secret", "", "secret key, or specify in AWS_SECRET_ACCESS_KEY env")
@@ -104,6 +104,10 @@ func main() {
 	if upload {
 		if objectsize == 0 {
 			errorf("must specify object size for upload")
+		}
+
+		if objectsize > (10000 * chunksize) {
+			errorf("object size can not exceed 10000 * chunksize")
 		}
 
 		for i := 0; i < files; i++ {
