@@ -1,15 +1,18 @@
 package s3io
 
 import (
+	"context"
 	"io"
 	"log"
 	"os"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/smithy-go/middleware"
 )
 
 type S3Conf struct {
@@ -66,7 +69,7 @@ func WithConcurrency(c int) Option {
 	return func(s *S3Conf) { s.concurrency = c }
 }
 
-func (c *S3Conf) getCreds() *credentials.Credentials {
+func (c *S3Conf) getCreds() credentials.StaticCredentialsProvider {
 	// TODO support token/IAM
 	if c.awsID == "" {
 		c.awsID = os.Getenv("AWS_ACCESS_KEY_ID")
@@ -81,40 +84,65 @@ func (c *S3Conf) getCreds() *credentials.Credentials {
 		log.Fatal("no AWS_SECRET_ACCESS_KEY found")
 	}
 
-	return credentials.NewStaticCredentials(c.awsID, c.awsSecret, "")
+	return credentials.NewStaticCredentialsProvider(c.awsID, c.awsSecret, "")
 }
 
-func (c *S3Conf) config() *aws.Config {
+func (c *S3Conf) ResolveEndpoint(service, region string) (aws.Endpoint, error) {
+	return aws.Endpoint{
+		PartitionID:       "aws",
+		URL:               c.endpoint,
+		SigningRegion:     c.awsRegion,
+		HostnameImmutable: true,
+	}, nil
+}
+
+func (c *S3Conf) config() aws.Config {
 	creds := c.getCreds()
 
-	config := aws.NewConfig().WithRegion(c.awsRegion).WithCredentials(creds)
-	config = config.WithDisableSSL(c.disableSSL)
-	config = config.WithDisableComputeChecksums(c.checksumDisable)
-	config = config.WithS3ForcePathStyle(c.pathStyle)
-	if c.endpoint != "" {
-		config = config.WithEndpoint(c.endpoint)
+	if c.checksumDisable {
+		cfg, err := config.LoadDefaultConfig(
+			context.TODO(),
+			config.WithRegion(c.awsRegion),
+			config.WithCredentialsProvider(creds),
+			config.WithEndpointResolver(c),
+			config.WithAPIOptions([]func(*middleware.Stack) error{v4.SwapComputePayloadSHA256ForUnsignedPayloadMiddleware}),
+		)
+		if err != nil {
+			log.Fatalln("error:", err)
+		}
+
+		return cfg
+	}
+	cfg, err := config.LoadDefaultConfig(
+		context.TODO(),
+		config.WithRegion(c.awsRegion),
+		config.WithCredentialsProvider(creds),
+		config.WithEndpointResolver(c),
+	)
+	if err != nil {
+		log.Fatalln("error:", err)
 	}
 
-	return config
+	return cfg
 }
 
 func (c *S3Conf) UploadData(r io.Reader, bucket, object string) error {
-	uploader := s3manager.NewUploader(session.New(c.config()))
+	uploader := manager.NewUploader(s3.NewFromConfig(c.config()))
 	uploader.PartSize = c.partSize
 	uploader.Concurrency = c.concurrency
 
-	upinfo := &s3manager.UploadInput{
+	upinfo := &s3.PutObjectInput{
 		Body:   r,
 		Bucket: &bucket,
 		Key:    &object,
 	}
 
-	_, err := uploader.Upload(upinfo)
+	_, err := uploader.Upload(context.Background(), upinfo)
 	return err
 }
 
 func (c *S3Conf) DownloadData(w io.WriterAt, bucket, object string) (int64, error) {
-	downloader := s3manager.NewDownloader(session.New(c.config()))
+	downloader := manager.NewDownloader(s3.NewFromConfig(c.config()))
 	downloader.PartSize = c.partSize
 	downloader.Concurrency = c.concurrency
 
@@ -123,5 +151,5 @@ func (c *S3Conf) DownloadData(w io.WriterAt, bucket, object string) (int64, erro
 		Key:    &object,
 	}
 
-	return downloader.Download(w, downinfo)
+	return downloader.Download(context.Background(), w, downinfo)
 }
