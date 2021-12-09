@@ -21,7 +21,6 @@ type S3Conf struct {
 	awsRegion       string
 	endpoint        string
 	checksumDisable bool
-	disableSSL      bool
 	pathStyle       bool
 	partSize        int64
 	concurrency     int
@@ -55,9 +54,6 @@ func WithEndpoint(e string) Option {
 }
 func WithDisableChecksum() Option {
 	return func(s *S3Conf) { s.checksumDisable = true }
-}
-func WithDisableSSL() Option {
-	return func(s *S3Conf) { s.disableSSL = true }
 }
 func WithPathStyle() Option {
 	return func(s *S3Conf) { s.pathStyle = true }

@@ -27,7 +27,6 @@ var (
 	bucket          string
 	prefix          string
 	checksumDisable bool
-	disableSSL      bool
 	pathStyle       bool
 	upload          bool
 	download        bool
@@ -46,7 +45,6 @@ func init() {
 	flag.StringVar(&bucket, "bucket", "", "s3 bucket")
 	flag.StringVar(&prefix, "prefix", "", "object name prefix")
 	flag.BoolVar(&checksumDisable, "disablechecksum", false, "disable server checksums")
-	flag.BoolVar(&disableSSL, "disablessl", false, "disable server ssl connections")
 	flag.BoolVar(&pathStyle, "pathstyle", false, "use pathstyle bucket addressing")
 	flag.BoolVar(&upload, "upload", false, "upload data to s3")
 	flag.BoolVar(&download, "download", false, "download data from s3")
@@ -88,9 +86,6 @@ func main() {
 	}
 	if checksumDisable {
 		opts = append(opts, s3io.WithDisableChecksum())
-	}
-	if disableSSL {
-		opts = append(opts, s3io.WithDisableSSL())
 	}
 	if pathStyle {
 		opts = append(opts, s3io.WithPathStyle())
