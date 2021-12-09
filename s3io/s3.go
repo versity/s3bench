@@ -2,8 +2,10 @@ package s3io
 
 import (
 	"context"
+	"crypto/tls"
 	"io"
 	"log"
+	"net/http"
 	"os"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -95,12 +97,18 @@ func (c *S3Conf) ResolveEndpoint(service, region string) (aws.Endpoint, error) {
 func (c *S3Conf) config() aws.Config {
 	creds := c.getCreds()
 
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{Transport: tr}
+
 	if c.checksumDisable {
 		cfg, err := config.LoadDefaultConfig(
 			context.TODO(),
 			config.WithRegion(c.awsRegion),
 			config.WithCredentialsProvider(creds),
 			config.WithEndpointResolver(c),
+			config.WithHTTPClient(client),
 			config.WithAPIOptions([]func(*middleware.Stack) error{v4.SwapComputePayloadSHA256ForUnsignedPayloadMiddleware}),
 		)
 		if err != nil {
@@ -114,6 +122,7 @@ func (c *S3Conf) config() aws.Config {
 		config.WithRegion(c.awsRegion),
 		config.WithCredentialsProvider(creds),
 		config.WithEndpointResolver(c),
+		config.WithHTTPClient(client),
 	)
 	if err != nil {
 		log.Fatalln("error:", err)
