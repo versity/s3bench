@@ -89,7 +89,7 @@ func (c *S3Conf) getCreds() credentials.StaticCredentialsProvider {
 	return credentials.NewStaticCredentialsProvider(c.awsID, c.awsSecret, "")
 }
 
-func (c *S3Conf) ResolveEndpoint(service, region string) (aws.Endpoint, error) {
+func (c *S3Conf) ResolveEndpoint(service, region string, options ...interface{}) (aws.Endpoint, error) {
 	return aws.Endpoint{
 		PartitionID:       "aws",
 		URL:               c.endpoint,
@@ -114,7 +114,7 @@ func (c *S3Conf) config() aws.Config {
 
 	if c.endpoint != "" && c.endpoint != "aws" {
 		opts = append(opts,
-			config.WithEndpointResolver(c))
+			config.WithEndpointResolverWithOptions(c))
 	}
 
 	if c.checksumDisable {
