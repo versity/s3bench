@@ -26,6 +26,7 @@ type S3Conf struct {
 	pathStyle       bool
 	partSize        int64
 	concurrency     int
+	debug           bool
 }
 
 func New(opts ...Option) *S3Conf {
@@ -65,6 +66,9 @@ func WithPartSize(p int64) Option {
 }
 func WithConcurrency(c int) Option {
 	return func(s *S3Conf) { s.concurrency = c }
+}
+func WithDebug() Option {
+	return func(s *S3Conf) { s.debug = true }
 }
 
 func (c *S3Conf) getCreds() credentials.StaticCredentialsProvider {
@@ -116,6 +120,11 @@ func (c *S3Conf) config() aws.Config {
 	if c.checksumDisable {
 		opts = append(opts,
 			config.WithAPIOptions([]func(*middleware.Stack) error{v4.SwapComputePayloadSHA256ForUnsignedPayloadMiddleware}))
+	}
+
+	if c.debug {
+		opts = append(opts,
+			config.WithClientLogMode(aws.LogSigning|aws.LogRetries|aws.LogRequest|aws.LogResponse|aws.LogRequestEventMessage|aws.LogResponseEventMessage))
 	}
 
 	cfg, err := config.LoadDefaultConfig(

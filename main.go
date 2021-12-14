@@ -31,6 +31,7 @@ var (
 	upload          bool
 	download        bool
 	rand            bool
+	debug           bool
 )
 
 func init() {
@@ -49,6 +50,7 @@ func init() {
 	flag.BoolVar(&upload, "upload", false, "upload data to s3")
 	flag.BoolVar(&download, "download", false, "download data from s3")
 	flag.BoolVar(&rand, "rand", false, "use random data (default is all 0s)")
+	flag.BoolVar(&debug, "debug", false, "enable debug output")
 }
 
 func errorf(format string, a ...interface{}) {
@@ -89,6 +91,9 @@ func main() {
 	}
 	if pathStyle {
 		opts = append(opts, s3io.WithPathStyle())
+	}
+	if debug {
+		opts = append(opts, s3io.WithDebug())
 	}
 
 	s3conf := s3io.New(opts...)
