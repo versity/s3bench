@@ -102,28 +102,24 @@ func (c *S3Conf) config() aws.Config {
 	}
 	client := &http.Client{Transport: tr}
 
-	if c.checksumDisable {
-		cfg, err := config.LoadDefaultConfig(
-			context.TODO(),
-			config.WithRegion(c.awsRegion),
-			config.WithCredentialsProvider(creds),
-			config.WithEndpointResolver(c),
-			config.WithHTTPClient(client),
-			config.WithAPIOptions([]func(*middleware.Stack) error{v4.SwapComputePayloadSHA256ForUnsignedPayloadMiddleware}),
-		)
-		if err != nil {
-			log.Fatalln("error:", err)
-		}
-
-		return cfg
-	}
-	cfg, err := config.LoadDefaultConfig(
-		context.TODO(),
+	opts := []func(*config.LoadOptions) error{
 		config.WithRegion(c.awsRegion),
 		config.WithCredentialsProvider(creds),
-		config.WithEndpointResolver(c),
 		config.WithHTTPClient(client),
-	)
+	}
+
+	if c.endpoint != "" && c.endpoint != "aws" {
+		opts = append(opts,
+			config.WithEndpointResolver(c))
+	}
+
+	if c.checksumDisable {
+		opts = append(opts,
+			config.WithAPIOptions([]func(*middleware.Stack) error{v4.SwapComputePayloadSHA256ForUnsignedPayloadMiddleware}))
+	}
+
+	cfg, err := config.LoadDefaultConfig(
+		context.TODO(), opts...)
 	if err != nil {
 		log.Fatalln("error:", err)
 	}

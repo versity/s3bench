@@ -41,7 +41,7 @@ func init() {
 	flag.StringVar(&awsID, "access", "", "access key, or specify in AWS_ACCESS_KEY_ID env")
 	flag.StringVar(&awsSecret, "secret", "", "secret key, or specify in AWS_SECRET_ACCESS_KEY env")
 	flag.StringVar(&awsRegion, "region", "us-east-1", "bucket region")
-	flag.StringVar(&endpoint, "endpoint", "", "s3 server endpoint")
+	flag.StringVar(&endpoint, "endpoint", "", "s3 server endpoint, default aws")
 	flag.StringVar(&bucket, "bucket", "", "s3 bucket")
 	flag.StringVar(&prefix, "prefix", "", "object name prefix")
 	flag.BoolVar(&checksumDisable, "disablechecksum", false, "disable server checksums")
