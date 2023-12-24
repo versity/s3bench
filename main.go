@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -18,6 +20,7 @@ import (
 var (
 	files           int
 	concurrency     int
+	secs            int
 	chunksize       int64
 	objectsize      int64
 	awsID           string
@@ -30,6 +33,7 @@ var (
 	pathStyle       bool
 	upload          bool
 	download        bool
+	query           bool
 	rand            bool
 	debug           bool
 	delete          bool
@@ -38,6 +42,7 @@ var (
 func init() {
 	flag.IntVar(&files, "n", 1, "number of objects to read/write")
 	flag.IntVar(&concurrency, "concurrency", 1, "upload/download threads per object")
+	flag.IntVar(&secs, "sec", 1, "seconds to run query benchmark")
 	flag.Int64Var(&chunksize, "chunksize", 64*1024*1024, "upload/download size per thread")
 	flag.Int64Var(&objectsize, "objectsize", 0, "upload object size")
 	flag.StringVar(&awsID, "access", "", "access key, or specify in AWS_ACCESS_KEY_ID env")
@@ -49,6 +54,7 @@ func init() {
 	flag.BoolVar(&checksumDisable, "disablechecksum", false, "disable server checksums")
 	flag.BoolVar(&pathStyle, "pathstyle", false, "use pathstyle bucket addressing")
 	flag.BoolVar(&upload, "upload", false, "upload data to s3")
+	flag.BoolVar(&query, "query", false, "query object benchmark")
 	flag.BoolVar(&delete, "delete", false, "delete objects after uploading")
 	flag.BoolVar(&download, "download", false, "download data from s3")
 	flag.BoolVar(&rand, "rand", false, "use random data (default is all 0s)")
@@ -70,13 +76,6 @@ type actionFunc func(s3conf *s3io.S3Conf, wg *sync.WaitGroup) []result
 
 func main() {
 	flag.Parse()
-
-	if upload && download {
-		errorf("must only specify one of upload or download")
-	}
-	if !upload && !download {
-		errorf("must specify one of upload or download")
-	}
 
 	if bucket == "" {
 		errorf("must specify bucket")
@@ -102,22 +101,26 @@ func main() {
 
 	s3conf := s3io.New(opts...)
 
-	if upload {
+	switch {
+	case upload:
 		doRun(s3conf, doUpload)
-	}
-	if download {
-		doRun(s3conf, doDownload)
-	}
 
-	if upload && delete {
-		fmt.Println("cleaning objects...")
-		for i := 0; i < files; i++ {
-			obj := fmt.Sprintf("%v%v", prefix, i)
-			err := s3conf.DeleteObject(bucket, obj)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "delete %v/%v: %v\n", bucket, obj, err)
+		if delete {
+			fmt.Println("cleaning objects...")
+			for i := 0; i < files; i++ {
+				obj := fmt.Sprintf("%v%v", prefix, i)
+				err := s3conf.DeleteObject(bucket, obj)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "delete %v/%v: %v\n", bucket, obj, err)
+				}
 			}
 		}
+	case download:
+		doRun(s3conf, doDownload)
+	case query:
+		doQuery(s3conf)
+	default:
+		errorf("must specify one of upload/download/query")
 	}
 }
 
@@ -144,10 +147,13 @@ func doRun(s3conf *s3io.S3Conf, af actionFunc) {
 	fmt.Println()
 	fmt.Printf("run perf: %v in %v (%v MB/s)\n",
 		tot, elapsed, int(math.Ceil(float64(tot)/elapsed.Seconds())/1048576))
-
 }
 
 func doUpload(s3conf *s3io.S3Conf, wg *sync.WaitGroup) []result {
+	if download || query {
+		errorf("must only specify one of upload/download/query")
+	}
+
 	results := make([]result, files)
 
 	if objectsize == 0 {
@@ -181,6 +187,10 @@ func doUpload(s3conf *s3io.S3Conf, wg *sync.WaitGroup) []result {
 }
 
 func doDownload(s3conf *s3io.S3Conf, wg *sync.WaitGroup) []result {
+	if upload || query {
+		errorf("must only specify one of upload/download/query")
+	}
+
 	results := make([]result, files)
 
 	for i := 0; i < files; i++ {
@@ -197,4 +207,56 @@ func doDownload(s3conf *s3io.S3Conf, wg *sync.WaitGroup) []result {
 	}
 
 	return results
+}
+
+func doQuery(s3conf *s3io.S3Conf) {
+	if upload || download {
+		errorf("must only specify one of upload/download/query")
+	}
+
+	results := make([]int, concurrency)
+	var wg sync.WaitGroup
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(secs)*time.Second)
+	defer cancel()
+
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func(i int) {
+			results[i] = queryBench(ctx, s3conf, fmt.Sprintf("%v%v", prefix, i))
+			wg.Done()
+		}(i)
+	}
+	wg.Wait()
+
+	var tot int
+	for i, cnt := range results {
+		tot += cnt
+		fmt.Printf("%v: %v in %v s (%v req/s)\n",
+			i, cnt, secs,
+			int(math.Ceil(float64(cnt)/float64(secs))))
+	}
+
+	fmt.Println()
+	fmt.Printf("run perf: %v in %v s (%v req/s)\n",
+		tot, secs, int(math.Ceil(float64(tot)/float64(secs))))
+}
+
+func queryBench(ctx context.Context, s3conf *s3io.S3Conf, obj string) int {
+	var count int
+	for {
+		if ctx.Err() != nil {
+			break
+		}
+
+		err := s3conf.HeadObject(ctx, bucket, obj)
+		if err != nil {
+			if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+				errorf("get object (%v/%v) headers: %v", bucket, obj, err)
+			}
+			break
+		}
+		count++
+	}
+	return count
 }

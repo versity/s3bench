@@ -176,3 +176,12 @@ func (c *S3Conf) DeleteObject(bucket, object string) error {
 
 	return err
 }
+
+func (c *S3Conf) HeadObject(ctx context.Context, bucket, object string) error {
+	_, err := c.client.HeadObject(ctx, &s3.HeadObjectInput{
+		Bucket: &bucket,
+		Key:    &object,
+	})
+
+	return err
+}
