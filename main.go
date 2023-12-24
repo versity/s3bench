@@ -32,6 +32,7 @@ var (
 	download        bool
 	rand            bool
 	debug           bool
+	delete          bool
 )
 
 func init() {
@@ -48,6 +49,7 @@ func init() {
 	flag.BoolVar(&checksumDisable, "disablechecksum", false, "disable server checksums")
 	flag.BoolVar(&pathStyle, "pathstyle", false, "use pathstyle bucket addressing")
 	flag.BoolVar(&upload, "upload", false, "upload data to s3")
+	flag.BoolVar(&delete, "delete", false, "delete objects after uploading")
 	flag.BoolVar(&download, "download", false, "download data from s3")
 	flag.BoolVar(&rand, "rand", false, "use random data (default is all 0s)")
 	flag.BoolVar(&debug, "debug", false, "enable debug output")
@@ -145,6 +147,17 @@ func main() {
 	}
 	sg.Wait()
 	elapsed := time.Since(start)
+
+	if upload && delete {
+		fmt.Println("cleaning objects...")
+		for i := 0; i < files; i++ {
+			obj := fmt.Sprintf("%v%v", prefix, i)
+			err := s3conf.DeleteObject(bucket, obj)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "delete %v/%v: %v\n", bucket, obj, err)
+			}
+		}
+	}
 
 	var tot int64
 	for i, res := range results {

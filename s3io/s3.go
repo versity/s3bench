@@ -27,6 +27,7 @@ type S3Conf struct {
 	partSize        int64
 	concurrency     int
 	debug           bool
+	client          *s3.Client
 }
 
 func New(opts ...Option) *S3Conf {
@@ -38,6 +39,9 @@ func New(opts ...Option) *S3Conf {
 	for _, opt := range opts {
 		opt(s)
 	}
+
+	s.client = s3.NewFromConfig(s.config())
+
 	return s
 }
 
@@ -137,7 +141,7 @@ func (c *S3Conf) config() aws.Config {
 }
 
 func (c *S3Conf) UploadData(r io.Reader, bucket, object string) error {
-	uploader := manager.NewUploader(s3.NewFromConfig(c.config()))
+	uploader := manager.NewUploader(c.client)
 	uploader.PartSize = c.partSize
 	uploader.Concurrency = c.concurrency
 
@@ -152,7 +156,7 @@ func (c *S3Conf) UploadData(r io.Reader, bucket, object string) error {
 }
 
 func (c *S3Conf) DownloadData(w io.WriterAt, bucket, object string) (int64, error) {
-	downloader := manager.NewDownloader(s3.NewFromConfig(c.config()))
+	downloader := manager.NewDownloader(c.client)
 	downloader.PartSize = c.partSize
 	downloader.Concurrency = c.concurrency
 
@@ -162,4 +166,13 @@ func (c *S3Conf) DownloadData(w io.WriterAt, bucket, object string) (int64, erro
 	}
 
 	return downloader.Download(context.Background(), w, downinfo)
+}
+
+func (c *S3Conf) DeleteObject(bucket, object string) error {
+	_, err := c.client.DeleteObject(context.Background(), &s3.DeleteObjectInput{
+		Bucket: &bucket,
+		Key:    &object,
+	})
+
+	return err
 }
