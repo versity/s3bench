@@ -66,6 +66,8 @@ type result struct {
 	err     error
 }
 
+type actionFunc func(s3conf *s3io.S3Conf, wg *sync.WaitGroup) []result
+
 func main() {
 	flag.Parse()
 
@@ -100,53 +102,12 @@ func main() {
 
 	s3conf := s3io.New(opts...)
 
-	var sg sync.WaitGroup
-	results := make([]result, files)
-	start := time.Now()
 	if upload {
-		if objectsize == 0 {
-			errorf("must specify object size for upload")
-		}
-
-		if objectsize > (10000 * chunksize) {
-			errorf("object size can not exceed 10000 * chunksize")
-		}
-
-		for i := 0; i < files; i++ {
-			sg.Add(1)
-			go func(i int) {
-				var r io.Reader
-				if rand {
-					r = randreader.New(int(objectsize), int(chunksize))
-				} else {
-					r = zeroreader.New(int(objectsize), int(chunksize))
-				}
-
-				start := time.Now()
-				err := s3conf.UploadData(r, bucket, fmt.Sprintf("%v%v", prefix, i))
-				results[i].elapsed = time.Since(start)
-				results[i].err = err
-				results[i].size = objectsize
-				sg.Done()
-			}(i)
-		}
+		doRun(s3conf, doUpload)
 	}
 	if download {
-		for i := 0; i < files; i++ {
-			sg.Add(1)
-			go func(i int) {
-				nw := nullwriter.New()
-				start := time.Now()
-				n, err := s3conf.DownloadData(nw, bucket, fmt.Sprintf("%v%v", prefix, i))
-				results[i].elapsed = time.Since(start)
-				results[i].err = err
-				results[i].size = n
-				sg.Done()
-			}(i)
-		}
+		doRun(s3conf, doDownload)
 	}
-	sg.Wait()
-	elapsed := time.Since(start)
 
 	if upload && delete {
 		fmt.Println("cleaning objects...")
@@ -158,6 +119,15 @@ func main() {
 			}
 		}
 	}
+}
+
+func doRun(s3conf *s3io.S3Conf, af actionFunc) {
+	var wg sync.WaitGroup
+	start := time.Now()
+
+	results := af(s3conf, &wg)
+	wg.Wait()
+	elapsed := time.Since(start)
 
 	var tot int64
 	for i, res := range results {
@@ -174,4 +144,57 @@ func main() {
 	fmt.Println()
 	fmt.Printf("run perf: %v in %v (%v MB/s)\n",
 		tot, elapsed, int(math.Ceil(float64(tot)/elapsed.Seconds())/1048576))
+
+}
+
+func doUpload(s3conf *s3io.S3Conf, wg *sync.WaitGroup) []result {
+	results := make([]result, files)
+
+	if objectsize == 0 {
+		errorf("must specify object size for upload")
+	}
+
+	if objectsize > (10000 * chunksize) {
+		errorf("object size can not exceed 10000 * chunksize")
+	}
+
+	for i := 0; i < files; i++ {
+		wg.Add(1)
+		go func(i int) {
+			var r io.Reader
+			if rand {
+				r = randreader.New(int(objectsize), int(chunksize))
+			} else {
+				r = zeroreader.New(int(objectsize), int(chunksize))
+			}
+
+			start := time.Now()
+			err := s3conf.UploadData(r, bucket, fmt.Sprintf("%v%v", prefix, i))
+			results[i].elapsed = time.Since(start)
+			results[i].err = err
+			results[i].size = objectsize
+			wg.Done()
+		}(i)
+	}
+
+	return results
+}
+
+func doDownload(s3conf *s3io.S3Conf, wg *sync.WaitGroup) []result {
+	results := make([]result, files)
+
+	for i := 0; i < files; i++ {
+		wg.Add(1)
+		go func(i int) {
+			nw := nullwriter.New()
+			start := time.Now()
+			n, err := s3conf.DownloadData(nw, bucket, fmt.Sprintf("%v%v", prefix, i))
+			results[i].elapsed = time.Since(start)
+			results[i].err = err
+			results[i].size = n
+			wg.Done()
+		}(i)
+	}
+
+	return results
 }
