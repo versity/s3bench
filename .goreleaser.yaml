@@ -1,0 +1,52 @@
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - goos:
+      - linux
+      - darwin
+    env:
+      # disable cgo to fix glibc issues: https://github.com/golang/go/issues/58550
+      # once we need to enable this, we will need to do per distro releases
+      - CGO_ENABLED=0
+    main: ./
+    binary: s3bench
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - format: tar.gz
+    # this name template makes the OS and Arch compatible with the results of uname.
+    name_template: >-
+      {{ .ProjectName }}_v{{ .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+
+    # Set this to true if you want all files in the archive to be in a single directory.
+    # If set to true and you extract the archive 'goreleaser_Linux_arm64.tar.gz',
+    # you'll get a folder 'goreleaser_Linux_arm64'.
+    # If set to false, all files are extracted separately.
+    # You can also set it to a custom folder name (templating is supported).
+    wrap_in_directory: true
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^Merge '
+
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# vim: set ts=2 sw=2 tw=0 fo=cnqoj
