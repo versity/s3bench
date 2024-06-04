@@ -40,6 +40,13 @@ func New(opts ...Option) *S3Conf {
 		opt(s)
 	}
 
+	if s.endpoint != "" && s.endpoint != "aws" {
+		s.client = s3.NewFromConfig(s.config(), func(o *s3.Options) {
+			o.BaseEndpoint = &s.endpoint
+		})
+		return s
+	}
+
 	s.client = s3.NewFromConfig(s.config())
 
 	return s
@@ -93,15 +100,6 @@ func (c *S3Conf) getCreds() credentials.StaticCredentialsProvider {
 	return credentials.NewStaticCredentialsProvider(c.awsID, c.awsSecret, "")
 }
 
-func (c *S3Conf) ResolveEndpoint(service, region string, options ...interface{}) (aws.Endpoint, error) {
-	return aws.Endpoint{
-		PartitionID:       "aws",
-		URL:               c.endpoint,
-		SigningRegion:     c.awsRegion,
-		HostnameImmutable: true,
-	}, nil
-}
-
 func (c *S3Conf) config() aws.Config {
 	creds := c.getCreds()
 
@@ -114,11 +112,6 @@ func (c *S3Conf) config() aws.Config {
 		config.WithRegion(c.awsRegion),
 		config.WithCredentialsProvider(creds),
 		config.WithHTTPClient(client),
-	}
-
-	if c.endpoint != "" && c.endpoint != "aws" {
-		opts = append(opts,
-			config.WithEndpointResolverWithOptions(c))
 	}
 
 	if c.checksumDisable {
